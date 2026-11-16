@@ -104,16 +104,13 @@ def get_usb_camera_devices() -> Dict[str, Dict[str, str]]:
     cameras = {}
     
     try:
-        # Get list of video devices
-        result = subprocess.run(
-            ["ls", "-1", "/dev/video*"],
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        video_devices = result.stdout.strip().split("\n")
-        video_devices = [d for d in video_devices if d]  # Filter empty strings
+        # Get list of video devices using glob instead of shell
+        from glob import glob
+        video_devices = sorted(glob("/dev/video*"))
+        
+        if not video_devices:
+            logging.warning("No /dev/video* devices found")
+            return cameras
         
     except Exception as e:
         logging.warning(f"Could not enumerate /dev/video* devices: {e}")

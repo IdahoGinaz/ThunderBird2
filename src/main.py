@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 import config
 from camera_manager import CameraManager
-from view_logic import ViewLogic
+from view_logic import ViewLogicEngine
 from output_manager import OutputManager
 
 # ============================================================================
@@ -65,7 +65,7 @@ class ThunderBird2:
     def __init__(self):
         """Initialize the application."""
         self.camera_manager = CameraManager()
-        self.view_logic = ViewLogic()
+        self.view_logic = ViewLogicEngine()
         self.output_manager = OutputManager()
         
         self.is_running = False
@@ -258,7 +258,7 @@ def run_tests():
     # Test 4: View logic
     print("Test 4: View logic module... ", end="")
     try:
-        logic = ViewLogic()
+        logic = ViewLogicEngine()
         print("PASS")
     except Exception as e:
         print(f"FAIL: {e}")

@@ -3,7 +3,7 @@ ThunderBird2 — View Logic & Control
 
 Handles view switching based on:
   - Turn signals (GPIO from octocoupler + CAN from Nissan Atlas)
-  - Manual input (Bluetooth keyboard)
+  - Manual input (Keyboard for POC, Bluetooth keyboard later)
   - Reverse/brake detection
   
 Coordinates which camera(s) to display and in what layout.
@@ -16,6 +16,8 @@ import os
 import sys
 import logging
 import threading
+import time
+import select
 from typing import Dict, List, Optional, Callable
 from enum import Enum
 from dataclasses import dataclass
@@ -39,12 +41,12 @@ logger = logging.getLogger("ThunderBird2.ViewLogic")
 
 class ViewMode(Enum):
     """View modes that can be displayed to the driver."""
-    NORMAL = "NORMAL"           # Normal forward view
-    LEFT_INDICATOR = "LEFT_INDICATOR"    # Left turn signal active
-    RIGHT_INDICATOR = "RIGHT_INDICATOR"  # Right turn signal active
-    REVERSE = "REVERSE"         # Reverse camera (backup)
-    PARKED = "PARKED"           # Quad-view or carousel
-    MANUAL = "MANUAL"           # Driver manually selected
+    NORMAL = "NORMAL"
+    LEFT_INDICATOR = "LEFT_INDICATOR"
+    RIGHT_INDICATOR = "RIGHT_INDICATOR"
+    REVERSE = "REVERSE"
+    PARKED = "PARKED"
+    MANUAL = "MANUAL"
 
 @dataclass
 class InputSignals:
@@ -53,7 +55,7 @@ class InputSignals:
     right_indicator: bool = False
     reverse: bool = False
     brake: bool = False
-    manual_camera: Optional[int] = None  # 0=front, 1=left, 2=right, 3=rear
+    manual_camera: Optional[int] = None
     timestamp: float = 0.0
 
 # ============================================================================
@@ -61,16 +63,11 @@ class InputSignals:
 # ============================================================================
 
 class InputReader(ABC):
-    """Base class for different input sources (GPIO, CAN, Bluetooth)."""
+    """Base class for different input sources (GPIO, CAN, Keyboard)."""
     
     @abstractmethod
     def read_signals(self) -> InputSignals:
-        """
-        Read current state of signals.
-        
-        Returns:
-            InputSignals with current values
-        """
+        """Read current state of signals."""
         pass
     
     @abstractmethod
@@ -83,325 +80,251 @@ class InputReader(ABC):
         """Stop reading inputs."""
         pass
 
+class KeyboardInputReader(InputReader):
+    """
+    Read manual camera selection from keyboard (POC).
+    
+    Keys:
+      - '1', '2', '3' : Select camera 1, 2, or 3
+      - 'q' : Quit (via exception)
+      - 'r' : Trigger reverse mode
+    """
+    
+    def __init__(self):
+        """Initialize keyboard reader."""
+        self.is_running = False
+        self.current_camera = 0
+        self.reverse = False
+        self.signals = InputSignals()
+        logger.info("KeyboardInputReader created (POC mode)")
+    
+    def read_signals(self) -> InputSignals:
+        """Check for keyboard input (non-blocking)."""
+        if not self.is_running:
+            return self.signals
+        
+        # Non-blocking read on stdin
+        if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+            try:
+                key = sys.stdin.read(1).lower()
+                
+                if key == 'q':
+                    raise KeyboardInterrupt("User quit via keyboard")
+                elif key == '1':
+                    self.current_camera = 0
+                    self.signals.manual_camera = 0
+                    logger.info("Selected camera 1")
+                elif key == '2':
+                    self.current_camera = 1
+                    self.signals.manual_camera = 1
+                    logger.info("Selected camera 2")
+                elif key == '3':
+                    self.current_camera = 2
+                    self.signals.manual_camera = 2
+                    logger.info("Selected camera 3")
+                elif key == 'r':
+                    self.reverse = not self.reverse
+                    self.signals.reverse = self.reverse
+                    logger.info(f"Reverse: {self.reverse}")
+            except (EOFError, KeyboardInterrupt):
+                raise
+            except Exception as e:
+                logger.debug(f"Keyboard read error: {e}")
+        
+        self.signals.timestamp = time.time()
+        return self.signals
+    
+    def start(self):
+        """Start reading keyboard input."""
+        self.is_running = True
+        # Set stdin to non-blocking on Unix-like systems
+        try:
+            import tty
+            import termios
+            self.original_settings = termios.tcgetattr(sys.stdin)
+            tty.setraw(sys.stdin.fileno())
+        except Exception as e:
+            logger.warning(f"Could not set terminal to raw mode: {e}")
+        logger.info("Keyboard reader started")
+    
+    def stop(self):
+        """Stop reading keyboard input."""
+        self.is_running = False
+        # Restore terminal settings
+        try:
+            import termios
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.original_settings)
+        except:
+            pass
+        logger.info("Keyboard reader stopped")
+
 class GPIOInputReader(InputReader):
     """
     Read turn signals and control signals from GPIO (octocoupler).
-    
-    Uses RPi.GPIO or gpiozero library to poll octocoupler pins.
+    TODO: Implement in Phase 3 when hardware is wired.
     """
     
     def __init__(self):
         """Initialize GPIO reader."""
         self.is_running = False
-        logger.info("GPIOInputReader created")
-        # TODO: Import RPi.GPIO or gpiozero
-        # TODO: Configure pins from config.OCTOCOUPLER_PINS
+        self.signals = InputSignals()
+        logger.info("GPIOInputReader created (not yet implemented)")
     
     def read_signals(self) -> InputSignals:
-        """
-        Read current state of GPIO pins.
-        
-        Returns:
-            InputSignals with GPIO pin states
-        """
-        # TODO: Read GPIO pins
-        # TODO: Apply debouncing (config.INDICATOR_DEBOUNCE_MS)
-        # TODO: Return InputSignals
-        
-        return InputSignals()
+        """Return dummy signals for now."""
+        return self.signals
     
     def start(self):
-        """Start GPIO polling thread."""
-        if self.is_running:
-            return
-        
+        """Start reading GPIO."""
         self.is_running = True
-        # TODO: Start background polling thread
-        logger.info("GPIOInputReader started")
     
     def stop(self):
-        """Stop GPIO polling."""
+        """Stop reading GPIO."""
         self.is_running = False
-        logger.info("GPIOInputReader stopped")
 
 class CANInputReader(InputReader):
     """
-    Read turn signals and status from Nissan Atlas CAN bus.
-    
-    Uses python-can library to decode CAN messages.
-    CAN IDs and message formats from config.CAN_MESSAGES.
+    Read Nissan Atlas CAN messages (turn signals, reverse, brake).
+    TODO: Implement in Phase 3 when CAN HAT is wired and IDs are known.
     """
     
     def __init__(self):
         """Initialize CAN reader."""
         self.is_running = False
-        self.can_bus = None  # python-can Bus object
-        self.last_can_message_time = 0.0
-        logger.info("CANInputReader created")
-        # TODO: Import python-can
-        # TODO: Initialize CAN interface (RS485 HAT)
+        self.signals = InputSignals()
+        logger.info("CANInputReader created (not yet implemented)")
     
     def read_signals(self) -> InputSignals:
-        """
-        Read current state from CAN bus.
-        
-        If CAN is silent, returns all-false (let GPIO fallback take over).
-        
-        Returns:
-            InputSignals with CAN message states
-        """
-        # TODO: Read pending CAN messages
-        # TODO: Decode using config.CAN_MESSAGES
-        # TODO: Check timeout (config.CAN_FALLBACK_TIMEOUT)
-        # TODO: Return InputSignals or fallback
-        
-        return InputSignals()
+        """Return dummy signals for now."""
+        return self.signals
     
     def start(self):
-        """Start CAN message reader."""
-        if self.is_running:
-            return
-        
+        """Start reading CAN bus."""
         self.is_running = True
-        # TODO: Start background CAN reading thread
-        logger.info("CANInputReader started")
     
     def stop(self):
-        """Stop CAN reader."""
+        """Stop reading CAN."""
         self.is_running = False
-        logger.info("CANInputReader stopped")
-
-class BluetoothInputReader(InputReader):
-    """
-    Read manual input from Bluetooth keyboard.
-    
-    Maps keyboard keys to camera selection:
-      1 = Front camera
-      2 = Left camera
-      3 = Right camera
-      4 = Rear camera
-      0 = Auto (use GPIO/CAN)
-    """
-    
-    def __init__(self):
-        """Initialize Bluetooth reader."""
-        self.is_running = False
-        self.selected_camera = None
-        logger.info("BluetoothInputReader created")
-        # TODO: Import bluetooth module
-        # TODO: Connect to BT keyboard
-    
-    def read_signals(self) -> InputSignals:
-        """
-        Read manual input from Bluetooth keyboard.
-        
-        Returns:
-            InputSignals with manual_camera set if key pressed
-        """
-        # TODO: Poll bluetooth keyboard events
-        # TODO: Map keypresses to camera selection
-        # TODO: Return InputSignals
-        
-        return InputSignals()
-    
-    def start(self):
-        """Start Bluetooth input reader."""
-        if self.is_running:
-            return
-        
-        self.is_running = True
-        # TODO: Start background BT event reader
-        logger.info("BluetoothInputReader started")
-    
-    def stop(self):
-        """Stop Bluetooth reader."""
-        self.is_running = False
-        logger.info("BluetoothInputReader stopped")
 
 # ============================================================================
-# VIEW CONTROLLER
+# VIEW LOGIC ENGINE
 # ============================================================================
 
-class ViewLogic:
+class ViewLogicEngine:
     """
     Main view switching logic.
     
-    Combines signals from GPIO, CAN, and Bluetooth to decide which
-    camera(s) to display. Implements debouncing and fallback logic.
-    
-    Responsibilities:
-      - Read inputs from multiple sources
-      - Apply debouncing
-      - Determine current view mode
-      - Signal output pipeline what to display
-      - Handle setup menu if needed
+    Reads input signals (GPIO, CAN, keyboard) and determines which camera(s)
+    to display based on priority:
+      1. Manual override (keyboard input)
+      2. Reverse camera (when in reverse)
+      3. Turn signals (left/right turn)
+      4. Normal view (front camera)
     """
     
-    def __init__(self):
+    def __init__(self, num_cameras: int = 3):
         """Initialize view logic."""
-        self.current_view: ViewMode = ViewMode(DEFAULT_VIEW)
-        self.previous_view: Optional[ViewMode] = None
-        self.is_running = False
-        
-        # Input readers
-        self.gpio_reader: Optional[GPIOInputReader] = None
-        self.can_reader: Optional[CANInputReader] = None
-        self.bt_reader: Optional[BluetoothInputReader] = None
-        
-        # Callbacks when view changes
-        self.on_view_change_callbacks: List[Callable[[ViewMode], None]] = []
-        
-        logger.info("ViewLogic initialized")
+        self.num_cameras = num_cameras
+        self.input_reader: Optional[InputReader] = None
+        self.current_view = DEFAULT_VIEW
+        self.last_signals = InputSignals()
+        self.on_view_change_callback: Optional[Callable] = None
+        logger.info(f"ViewLogicEngine initialized with {num_cameras} cameras")
     
-    def register_on_view_change(self, callback: Callable[[ViewMode], None]):
-        """
-        Register callback to be called when view mode changes.
-        
-        Args:
-            callback: Function that takes ViewMode as argument
-        """
-        self.on_view_change_callbacks.append(callback)
+    def set_input_reader(self, reader: InputReader):
+        """Set the input reader (keyboard, GPIO, CAN, etc)."""
+        self.input_reader = reader
+        logger.info(f"Input reader set: {reader.__class__.__name__}")
     
-    def _determine_view_mode(self, signals: InputSignals) -> ViewMode:
+    def register_on_view_change(self, callback: Callable):
+        """Register a callback for when view mode changes."""
+        self.on_view_change_callback = callback
+        logger.info(f"View change callback registered")
+    
+    def get_active_camera(self) -> int:
         """
-        Determine which view mode should be active based on input signals.
-        
-        Priority (highest to lowest):
-          1. Manual Bluetooth input (driver override)
-          2. Reverse signal (backup camera)
-          3. Turn signal + indicator (turn signal priority)
-          4. Default normal view
-        
-        Args:
-            signals: Current input signals from all sources
+        Determine which camera should be active based on current inputs.
         
         Returns:
-            ViewMode that should be displayed
+            Camera index (0-based)
         """
-        # TODO: Implement priority-based view selection
-        # TODO: Apply debouncing logic
+        if self.input_reader is None:
+            logger.warning("No input reader set, using camera 0")
+            return 0
         
-        return ViewMode.NORMAL
+        signals = self.input_reader.read_signals()
+        self.last_signals = signals
+        
+        previous_view = self.current_view
+        
+        # Priority 1: Manual override (keyboard/Bluetooth)
+        if signals.manual_camera is not None:
+            self.current_view = ViewMode.MANUAL
+            camera = signals.manual_camera
+        # Priority 2: Reverse camera
+        elif signals.reverse:
+            self.current_view = ViewMode.REVERSE
+            camera = 2  # Assuming camera 2 is rear-facing
+        # Priority 3: Turn signals
+        elif signals.left_indicator:
+            self.current_view = ViewMode.LEFT_INDICATOR
+            camera = 1  # Left camera
+        elif signals.right_indicator:
+            self.current_view = ViewMode.RIGHT_INDICATOR
+            camera = 1  # Right camera (or 2, depending on layout)
+        # Priority 4: Normal forward view
+        else:
+            self.current_view = ViewMode.NORMAL
+            camera = 0
+        
+        # Trigger callback if view changed
+        if previous_view != self.current_view and self.on_view_change_callback:
+            self.on_view_change_callback(self.current_view)
+        
+        return camera
     
-    def process_signals(self, signals: InputSignals) -> bool:
-        """
-        Process input signals and update view if needed.
-        
-        Args:
-            signals: Current input signals
-        
-        Returns:
-            True if view changed, False if same
-        """
-        new_view = self._determine_view_mode(signals)
-        
-        if new_view != self.current_view:
-            logger.info(f"View changed: {self.current_view.value} -> {new_view.value}")
-            self.previous_view = self.current_view
-            self.current_view = new_view
-            
-            # Call registered callbacks
-            for callback in self.on_view_change_callbacks:
-                try:
-                    callback(self.current_view)
-                except Exception as e:
-                    logger.error(f"Error in view change callback: {e}")
-            
-            return True
-        
-        return False
+    def get_view_info(self) -> Dict:
+        """Get current view mode and camera info."""
+        active_camera = self.get_active_camera()
+        return {
+            "mode": self.current_view.value,
+            "camera": active_camera,
+            "left_indicator": self.last_signals.left_indicator,
+            "right_indicator": self.last_signals.right_indicator,
+            "reverse": self.last_signals.reverse,
+        }
     
     def start(self):
-        """Start view logic and input readers."""
-        if self.is_running:
-            logger.warning("ViewLogic already running")
-            return
-        
-        self.is_running = True
-        
-        # Start input readers
-        if self.gpio_reader:
-            self.gpio_reader.start()
-        if self.can_reader:
-            self.can_reader.start()
-        if self.bt_reader:
-            self.bt_reader.start()
-        
-        logger.info("ViewLogic started")
+        """Start view logic engine."""
+        if self.input_reader:
+            self.input_reader.start()
+        logger.info("ViewLogicEngine started")
     
     def stop(self):
-        """Stop view logic and input readers."""
-        if not self.is_running:
-            return
-        
-        self.is_running = False
-        
-        # Stop input readers
-        if self.gpio_reader:
-            self.gpio_reader.stop()
-        if self.can_reader:
-            self.can_reader.stop()
-        if self.bt_reader:
-            self.bt_reader.stop()
-        
-        logger.info("ViewLogic stopped")
-    
-    def get_current_view(self) -> ViewMode:
-        """Get the current view mode."""
-        return self.current_view
-    
-    def set_manual_view(self, camera_id: Optional[int]):
-        """
-        Manually override view mode (from Bluetooth keyboard).
-        
-        Args:
-            camera_id: Camera to display (None = auto)
-        """
-        # TODO: Create InputSignals with manual_camera set
-        # TODO: Process and update view
-        
-        pass
-
-# ============================================================================
-# HELPER FUNCTIONS
-# ============================================================================
-
-def debounce_signal(signal_history: List[bool], window_size: int = 3) -> bool:
-    """
-    Apply debouncing to a signal to reduce false triggers.
-    
-    Args:
-        signal_history: Recent signal values (True/False)
-        window_size: Majority voting window
-    
-    Returns:
-        Debounced signal value
-    """
-    if not signal_history:
-        return False
-    
-    # Simple majority voting
-    true_count = sum(1 for s in signal_history[-window_size:] if s)
-    return true_count >= (window_size // 2 + 1)
+        """Stop view logic engine."""
+        if self.input_reader:
+            self.input_reader.stop()
+        logger.info("ViewLogicEngine stopped")
 
 if __name__ == "__main__":
-    # Test view logic
+    # Test keyboard input
     logging.basicConfig(level=logging.INFO)
     
-    logic = ViewLogic()
+    engine = ViewLogicEngine(num_cameras=3)
+    reader = KeyboardInputReader()
+    engine.set_input_reader(reader)
+    engine.start()
     
-    def on_view_change(view: ViewMode):
-        print(f"View changed: {view.value}")
+    print("\n=== Keyboard Input Test ===")
+    print("Press: 1/2/3 to select camera, r for reverse, q to quit")
+    print()
     
-    logic.register_on_view_change(on_view_change)
-    logic.start()
-    
-    # Simulate signals
-    for i in range(5):
-        signals = InputSignals(
-            left_indicator=(i >= 2),
-            right_indicator=False,
-        )
-        logic.process_signals(signals)
-    
-    logic.stop()
+    try:
+        for i in range(100):
+            view_info = engine.get_view_info()
+            print(f"Camera: {view_info['camera']} | Mode: {view_info['mode']}", end='\r')
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\nQuit")
+    finally:
+        engine.stop()

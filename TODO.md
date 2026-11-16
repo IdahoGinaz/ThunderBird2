@@ -12,12 +12,25 @@ Raspberry Pi continuously captures from 3 USB cameras, switches views based on t
 
 **Status**: Phase 1 complete! All foundation modules created and tested.
 
-## Next — Phase 2: Core implementation
-- [ ] Implement camera capture loop (OpenCV/V4L2)
+## Now — Phase 2: Core implementation
+- [x] Install OpenCV and camera dependencies on Pi
+- [x] Fix camera_detection.py glob issue (was using shell=True)
+- [x] Implement camera_manager.py with real OpenCV capture loop
+  - [x] Multi-threaded frame capture from USB cameras
+  - [x] Frame queue with JPEG encoding
+  - [x] Resolution and FPS configuration
+  - [x] Graceful startup/shutdown
+  - [x] All 3 cameras tested and capturing (2x Arducam 1080P + 1x Logitech C270)
+- [x] Fix syntax errors and import mismatches in core modules
+  - [x] Fixed output_manager.py file corruption
+  - [x] Updated main.py to use ViewLogicEngine (was importing ViewLogic)
+  - [x] Added callback support to ViewLogicEngine (register_on_view_change)
+  - [x] Application now starts successfully and runs event loop
 - [ ] Implement GPIO input reader (RPi.GPIO or gpiozero)
 - [ ] Implement CAN input reader (python-can for Nissan Atlas)
 - [ ] Implement view switching logic (priority: manual > reverse > turn > normal)
 - [ ] Implement three-output encoding pipeline (RTSP + RCA + USB DVR)
+- [ ] Implement actual frame capture-to-output pipeline
 - [ ] Setup menu for camera configuration changes
 
 ## Phase 3: Polish
