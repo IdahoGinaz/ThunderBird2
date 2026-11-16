@@ -12,9 +12,16 @@ pip install -e .
 ## Raspberry Pi
 
 ### SSH Access
-- **Username**: `wolfpack`
+- **Username**: `thunderbird2`
 - **IP**: 192.168.178.103
-- **Auth**: Public key at `~/.ssh/id_ed25519.pub` (configure manually or run `scripts/setup_ssh.ps1`)
+- **Hostname**: thunderbird2.local (use for `ssh thunderbird2.local`)
+- **Auth**: Public key (ED25519) — passwordless SSH configured ✓
+
+**Connect**:
+```
+ssh thunderbird2@thunderbird2.local
+```
+(No passphrase or password required)
 
 ### OS & Interfaces
 - **OS**: Raspberry Pi OS Bookworm
@@ -24,7 +31,7 @@ pip install -e .
 
 ### Python Environment
 ```bash
-ssh wolfpack@192.168.178.103
+ssh thunderbird2@thunderbird2.local
 
 # On Pi:
 python3 -m venv ~/thunderbird2/.venv

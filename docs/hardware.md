@@ -52,6 +52,6 @@ Bluetooth Mini Keyboard and Dongle,
 ## Devices on the network
 | Name | Host/IP | Role | Login method |
 |------|---------|------|--------------|
-| Raspberry Pi | 192.168.178.103 | Main controller | SSH key (wolfpack user) |
+| Raspberry Pi | 192.168.178.103 (thunderbird2.local) | Main controller | SSH key (thunderbird2 user) |
 | Android Head Unit | DHCP / static TBD | Video display | Physical buttons + BT keyboard |
 | Dev PC (Windows) | DHCP | Development + deployment | SSH to Pi |
