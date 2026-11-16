@@ -3,21 +3,34 @@
 Read this file, `README.md`, `TODO.md`, and `docs/hardware.md` before writing code.
 
 ## Project
-<!-- One paragraph: what it does, what problem it solves. -->
+We're building a robust, automotive‑grade dual‑camera controller on a Raspberry Pi that can switch, composite, and display camera feeds based on GPIO, CAN, or manual input — all running continuously under systemd.
+
+Project to replace the physical sidemirrors of a Nissan Atlas 2017 with USB cameras that change view based on indicator behaviour.
+Project must be able to detect the type and number of cameras connected and adapt the view as these may change.
+This may mean a setup menu is required if there are changes to the default setup to select which camera is which and what view setup is required.
+Start up must be quick and auto-restart on failure.
+Output will be to an android based head unit that takes a video feed either by USB (it's DVR function) or RCA input. We should be able
+to use a converter if needed to get the best resolution.
+Once operating well will consider object detection in certain cameras.
+Will need to consider how safe power down works.
+
+Open to considering other options/platforms/approach to what I've already started with.
+
 
 ## Hardware & platform (source of truth: docs/hardware.md)
-- Boards: <!-- e.g. Raspberry Pi Zero 2 W (OS varies per project), ESP32-S3 -->
+- Boards: Raspberry Pi 4.  Currently running BookWorm.
+- RS485 CAN Hat
+- Octocoupler (8 Channel)
+- Sabrent 10 port USB HUb. Model HB-BU10
+- Android Head Unit.   Android 13 "B200 - Core 8 - Rom 64GB - LPDDR4 - Ram 4GB - 1280X720 - ID7"
+- 2007 Nissan Atlas (Truck)
 - Sensors/radios: <!-- e.g. BME280 on I2C 0x76, SX1262 LoRa 915 MHz -->
-- Integrations: <!-- which of the PeterLab services below this touches -->
-- Dev machine: Windows + VS Code. Targets are deployed over SSH (key auth; I'm new to SSH keys, so explain key/config steps) or USB serial.
+- Dev machine: Windows + VS Code. Targets are deployed over SSH (key auth; I'm new to SSH keys, so explain key/config steps) or USB serial.  Raspberry Pi has a wifi connection to my home network that we can connect too.
+- Bluetooth Mini Keyboard.
+- 2 * USB Cameras (Arducam 1080P Low Light USB camera - "ID 0c45:0261 Microdia Arducam 1080P Low Light").  Keep in mind these may change.
+- 1 * logitech 720p USB camera.
+- 1 Bluetooth OBDII engine code reader.
 
-## Bigger picture: PeterLab
-This project may be a node in my homelab (repo: `..\PeterLab`; see its `docs/architecture.md`, `docs/principles.md`). Defaults unless the project says otherwise:
-- **MQTT is the telemetry backbone.** Publish sensor data to MQTT; use Home Assistant MQTT discovery where sensible.
-- **Home Assistant owns automation. OpenTAK (local server) owns situational awareness.** Don't duplicate those roles in device code.
-- Other planned services: Node-RED, Meshtastic, ChirpStack, InfluxDB/Grafana. Remote access via Tailscale only; no public port forwarding.
-- Principles: simplicity over cleverness, open standards, low power, document decisions, one new major service at a time.
-- TAK data format (CoT) is undecided; keep options open and ask before committing to one.
 
 ## Stack & conventions
 - Preferred tooling by purpose:
@@ -60,7 +73,6 @@ This project may be a node in my homelab (repo: `..\PeterLab`; see its `docs/arc
 - Confirm `.env.example` lists any new settings, and that no secrets were added to tracked files.
 - Note decisions worth keeping in `docs/decisions.md`.
 - Commit the changes.
-- Update `PeterLab` docs if this project adds a service, device, MQTT topic or network change there.
 
 Keep these checks short: a few bullets, not a lecture.
 
