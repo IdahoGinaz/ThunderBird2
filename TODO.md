@@ -12,7 +12,16 @@ Raspberry Pi continuously captures from 3 USB cameras, switches views based on t
 
 **Status**: Phase 1 complete! All foundation modules created and tested.
 
-## Now — Phase 2: Core implementation
+## Development Setup ✓
+- [x] Git line ending normalization (core.autocrlf=input)
+- [x] Pre-commit hook for syntax validation
+- [x] Validation script with self-tests
+- [x] Development workflow guide (DEVELOPMENT.md)
+- [x] Linting tools installed (black, pylint, pytest)
+
+**Before each session:** Run `.\scripts\validate.ps1 -Test` to catch errors early
+
+## Now — Phase 2: Core implementation (continued)
 - [x] Install OpenCV and camera dependencies on Pi
 - [x] Fix camera_detection.py glob issue (was using shell=True)
 - [x] Implement camera_manager.py with real OpenCV capture loop
@@ -26,6 +35,14 @@ Raspberry Pi continuously captures from 3 USB cameras, switches views based on t
   - [x] Updated main.py to use ViewLogicEngine (was importing ViewLogic)
   - [x] Added callback support to ViewLogicEngine (register_on_view_change)
   - [x] Application now starts successfully and runs event loop
+- [ ] **Implement keyboard input reader (POC)**
+  - [ ] Non-blocking keyboard input using `select` module
+  - [ ] Keys: 1/2/3 for cameras, R for reverse, L/R for indicators, Q to quit
+  - [ ] Test view switching with real camera output
+- [ ] **Implement actual frame capture-to-output pipeline**
+  - [ ] Pull frames from camera_manager queue in main loop
+  - [ ] Route frames to selected output via output_manager
+  - [ ] Test video appears on RTSP stream and RCA output
 - [ ] Implement GPIO input reader (RPi.GPIO or gpiozero)
 - [ ] Implement CAN input reader (python-can for Nissan Atlas)
 - [ ] Implement view switching logic (priority: manual > reverse > turn > normal)
