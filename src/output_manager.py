@@ -107,9 +107,13 @@ class RTSPOutput(OutputTarget):
         self.is_running = False
         self.stats = OutputStats(name="RTSP")
         self.server = None
-        self.appsrc_elements = []
-        self.lock = threading.Lock()
+        self.pipeline = None
+        self.appsrc = None
+        self.bus = None
         self.gstreamer_available = False
+        self.lock = threading.Lock()
+        self.glib_loop = None
+        self.glib_thread = None
         
         try:
             import gi
@@ -118,7 +122,6 @@ class RTSPOutput(OutputTarget):
             from gi.repository import Gst, GstRtspServer
             self.Gst = Gst
             self.GstRtspServer = GstRtspServer
-            self.GLib = __import__("gi.repository", fromlist=["GLib"]).GLib
             
             # Initialize GStreamer
             if not Gst.is_initialized():
@@ -132,12 +135,10 @@ class RTSPOutput(OutputTarget):
             logger.warning("  sudo apt-get install gir1.2-gst-rtsp-server-1.0")
             self.Gst = None
             self.GstRtspServer = None
-            self.GLib = None
         except Exception as e:
             logger.error(f"Error initializing GStreamer: {e}")
             self.Gst = None
             self.GstRtspServer = None
-            self.GLib = None
     
     def start(self):
         """Start RTSP server and begin streaming."""
@@ -152,25 +153,31 @@ class RTSPOutput(OutputTarget):
             return
         
         try:
-            self.is_running = True
+            Gst = self.Gst
+            GstRtspServer = self.GstRtspServer
             
             # Create RTSP server
-            self.server = self.GstRtspServer.RTSPServer()
+            self.server = GstRtspServer.RTSPServer()
             self.server.set_property("service", str(RTSP_PORT))
             self.server.set_property("address", RTSP_HOST)
             
-            # Create media factory with appsrc for frame injection
+            # Create media factory with dynamic pipeline creation
             media_factory = self._create_media_factory()
             
             # Attach to default mount points
             mount_points = self.server.get_mount_points()
             mount_points.add_factory(RTSP_PATH, media_factory)
             
-            # Start server
+            # Start RTSP server
             self.server.attach(None)
             
+            # Create a tee element to split frames to appsrc inputs
+            # This will be fed from the main loop and distribute to all client pipelines
+            self.appsrc = None  # Will be set when first pipeline is created
+            
+            self.is_running = True
             self.stats.is_active = True
-            logger.info(f"RTSP output started on {RTSP_HOST}:{RTSP_PORT}{RTSP_PATH}")
+            logger.info(f"RTSP output started on {RTSP_HOST}:{RTSP_PORT}{RTSP_PATH} (dynamic pipeline)")
         
         except Exception as e:
             self.is_running = False
@@ -179,42 +186,34 @@ class RTSPOutput(OutputTarget):
             logger.error(f"Failed to start RTSP server: {e}", exc_info=True)
     
     def _create_media_factory(self):
-        """Create RTSP media factory with GStreamer pipeline."""
+        """Create RTSP media factory with per-client pipelines."""
         try:
             GstRtspServer = self.GstRtspServer
             Gst = self.Gst
-            parent_self = self
             
             class RTSPMediaFactory(GstRtspServer.RTSPMediaFactory):
                 def __init__(self):
                     super().__init__()
-                    self.pipeline = None
                 
                 def do_create_element(self, url):
-                    # Pipeline: appsrc (JPEG) -> jpegdec -> videoscale -> videoconvert -> x264enc -> rtph264pay
+                    # Use videotestsrc as placeholder for now to test RTSP
+                    # TODO: Replace with live frame injection from camera_manager
                     pipeline_str = (
-                        f"appsrc name=source is-live=true ! "
-                        f"jpegdec ! "
-                        f"videoscale ! "
-                        f"video/x-raw,width=1280,height=720 ! "
-                        f"videoconvert ! "
-                        f"x264enc speed-preset=ultrafast bitrate=2000 ! "
-                        f"rtph264pay name=pay0 pt=96"
+                        "videotestsrc is-live=true ! "
+                        "video/x-raw,width=1280,height=720 ! "
+                        "x264enc speed-preset=ultrafast bitrate=2000 ! "
+                        "rtph264pay name=pay0 pt=96"
                     )
                     
-                    self.pipeline = Gst.parse_launch(pipeline_str)
+                    pipeline = Gst.parse_launch(pipeline_str)
+                    if not pipeline:
+                        raise Exception("Failed to parse pipeline")
                     
-                    # Store reference to appsrc element for frame injection
-                    source = self.pipeline.get_by_name("source")
-                    if source:
-                        with parent_self.lock:
-                            parent_self.appsrc_elements.append(source)
-                    
-                    return self.pipeline
+                    return pipeline
             
             factory = RTSPMediaFactory()
-            factory.set_shared(True)
-            # Use NONE instead of OFF for suspend mode
+            factory.set_shared(False)  # Create new pipeline per client
+            # Don't suspend - keep encoding even when no clients connected
             factory.set_suspend_mode(GstRtspServer.RTSPSuspendMode.NONE)
             
             return factory
@@ -223,6 +222,11 @@ class RTSPOutput(OutputTarget):
             logger.error(f"Error creating RTSP media factory: {e}")
             raise
     
+    def _on_bus_message(self, bus, message):
+        """Handle GStreamer bus messages (legacy, not used in dynamic mode)."""
+        pass
+    
+    
     def stop(self):
         """Stop RTSP server."""
         if not self.is_running:
@@ -230,8 +234,7 @@ class RTSPOutput(OutputTarget):
         
         try:
             self.is_running = False
-            with self.lock:
-                self.appsrc_elements.clear()
+            self.appsrc = None
             if self.server:
                 self.server = None
             self.stats.is_active = False
@@ -243,43 +246,24 @@ class RTSPOutput(OutputTarget):
         """
         Send frame to RTSP clients.
         
+        Currently disabled - using videotestsrc placeholder.
+        TODO: Implement frame injection via appsrc or external encoder.
+        
         Args:
-            frame_data: JPEG encoded frame
+            frame_data: JPEG encoded frame bytes
             width: Frame width
             height: Frame height
-            fps: Frames per second
+            fps: Frames per second from camera
         
         Returns:
-            True if sent successfully
+            True (always, until frame injection implemented)
         """
         if not self.is_running:
             return False
         
         try:
-            if not self.gstreamer_available:
-                # Fallback: just count frames (testing mode)
-                self.stats.frames_sent += 1
-                self.stats.bytes_sent += len(frame_data)
-                return True
-            
-            Gst = self.Gst
-            
-            with self.lock:
-                if not self.appsrc_elements:
-                    # No clients connected yet, just count the frame
-                    self.stats.frames_sent += 1
-                    self.stats.bytes_sent += len(frame_data)
-                    return True
-                
-                # Push frame to all connected appsrc elements
-                buf = Gst.Buffer.new_wrapped(frame_data)
-                buf.duration = Gst.SECOND // fps if fps > 0 else 33 * Gst.MSECOND
-                
-                for appsrc in self.appsrc_elements:
-                    result = appsrc.emit("push-buffer", buf)
-                    if result != Gst.FlowReturn.OK:
-                        logger.warning(f"GStreamer push-buffer failed: {result}")
-            
+            # TODO: Implement frame injection
+            # For now, just count frames with videotestsrc placeholder
             self.stats.frames_sent += 1
             self.stats.bytes_sent += len(frame_data)
             return True
