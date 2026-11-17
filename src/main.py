@@ -12,6 +12,7 @@ Usage:
 
 import os
 import sys
+import time
 import logging
 import argparse
 import signal
@@ -87,12 +88,20 @@ class ThunderBird2:
             logger.error("Failed to detect cameras")
             return False
         
-        logger.info("Camera setup complete")
+        num_cameras = len(self.camera_manager.cameras)
+        logger.info(f"Camera setup complete - {num_cameras} camera(s) detected")
         
-        # Setup view logic
+        # Update ViewLogicEngine with actual camera count
+        self.view_logic = ViewLogicEngine(num_cameras=num_cameras)
+        
+        # Setup keyboard input (POC and permanent manual override)
+        from view_logic import KeyboardInputReader
+        keyboard_reader = KeyboardInputReader(num_cameras=num_cameras)
+        self.view_logic.set_input_reader(keyboard_reader)
+        
         # Register callback for view changes
         self.view_logic.register_on_view_change(self._on_view_changed)
-        logger.info("View logic setup complete")
+        logger.info("View logic setup complete with keyboard input")
         
         # Setup output manager (creates encoders, streams)
         logger.info("Output manager initialized")
@@ -136,24 +145,49 @@ class ThunderBird2:
         logger.info("ThunderBird2 stopped")
     
     def run(self):
-        """Main event loop."""
+        """Main event loop - capture, switch views, encode, output."""
         logger.info("Entering main event loop")
         
         try:
             frame_count = 0
             while self.is_running:
-                # Capture frame from camera manager
-                # frame = self.camera_manager.get_frame(timeout=0.033)  # ~30fps
+                # Step 1: Get the active camera based on input signals
+                active_camera = self.view_logic.get_active_camera()
                 
-                # TODO: Process signals and update view
-                # signals = InputSignals(...)  # Collect from GPIO/CAN/BT
-                # self.view_logic.process_signals(signals)
+                # Step 2: Capture frames from queue until we get one from the active camera
+                # (frames from all cameras are in the same queue)
+                frame = None
+                attempts = 0
+                max_attempts = 10  # Prevent infinite loop
                 
-                # TODO: Encode and send to outputs
-                # self.output_manager.send_frame(frame.data, frame.width, frame.height, frame.fps)
+                while attempts < max_attempts:
+                    frame = self.camera_manager.get_frame(timeout=0.05)
+                    if frame is None:
+                        break
+                    if frame.camera_id == active_camera:
+                        break
+                    attempts += 1
+                
+                if frame is None or frame.camera_id != active_camera:
+                    # No frame from active camera yet, skip this iteration
+                    time.sleep(0.01)
+                    continue
+                
+                # Step 3: Send frame to all outputs
+                # frame.data is already JPEG encoded by camera_manager
+                success = self.output_manager.send_frame(
+                    frame.data,
+                    frame.width,
+                    frame.height,
+                    frame.fps
+                )
                 
                 frame_count += 1
-                if frame_count % 300 == 0:  # Every 10 seconds at 30fps
+                if not success:
+                    logger.warning(f"Frame {frame_count} failed to send to any output")
+                
+                # Print stats every 300 frames (~10 seconds at 30fps)
+                if frame_count % 300 == 0:
                     self.output_manager.print_stats()
         
         except KeyboardInterrupt:

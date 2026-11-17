@@ -125,6 +125,19 @@ VIEW_MODES = {
 # Default view on startup
 DEFAULT_VIEW = "NORMAL"
 
+# Keyboard input (for manual testing and final UI)
+KEYBOARD_ENABLED = True  # Keep in final model for manual override
+KEYBOARD_HELP = {
+    "1": "Front camera",
+    "2": "Left camera", 
+    "3": "Right camera",
+    "r": "Reverse camera",
+    "l": "Left indicator (turn)",
+    "k": "Right indicator (turn)",
+    "n": "Normal view",
+    "q": "Quit",
+}
+
 # Minimum turn signal duration to trigger camera switch (ms)
 INDICATOR_DEBOUNCE_MS = 200
 

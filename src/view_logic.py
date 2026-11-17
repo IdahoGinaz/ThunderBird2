@@ -82,21 +82,47 @@ class InputReader(ABC):
 
 class KeyboardInputReader(InputReader):
     """
-    Read manual camera selection from keyboard (POC).
+    Read manual camera selection from keyboard (POC & permanent).
     
-    Keys:
-      - '1', '2', '3' : Select camera 1, 2, or 3
-      - 'q' : Quit (via exception)
-      - 'r' : Trigger reverse mode
+    Supports dynamic camera count. Keys:
+      - '1' through '9': Select camera (up to num_cameras)
+      - 'r'/'R': Toggle reverse mode
+      - 'l'/'L': Left turn signal
+      - 'k'/'K': Right turn signal (mnemonic: riGht = K)
+      - 'n'/'N': Normal mode
+      - 'q'/'Q': Quit
     """
     
-    def __init__(self):
-        """Initialize keyboard reader."""
+    def __init__(self, num_cameras: int = 3):
+        """Initialize keyboard reader.
+        
+        Args:
+            num_cameras: Number of available cameras (dynamic support)
+        """
         self.is_running = False
+        self.num_cameras = num_cameras
         self.current_camera = 0
         self.reverse = False
+        self.left_indicator = False
+        self.right_indicator = False
         self.signals = InputSignals()
-        logger.info("KeyboardInputReader created (POC mode)")
+        self.original_settings = None
+        logger.info(f"KeyboardInputReader created - supporting {num_cameras} camera(s)")
+        self._print_help()
+    
+    def _print_help(self):
+        """Print keyboard controls."""
+        print("\n" + "="*60)
+        print("ThunderBird2 Keyboard Controls")
+        print("="*60)
+        for cam_num in range(1, min(self.num_cameras + 1, 10)):
+            print(f"  '{cam_num}' : Camera {cam_num}")
+        print(f"  'r'  : Reverse (back camera)")
+        print(f"  'l'  : Left turn signal")
+        print(f"  'k'  : Right turn signal")
+        print(f"  'n'  : Normal view")
+        print(f"  'q'  : Quit")
+        print("="*60 + "\n")
     
     def read_signals(self) -> InputSignals:
         """Check for keyboard input (non-blocking)."""
@@ -104,32 +130,69 @@ class KeyboardInputReader(InputReader):
             return self.signals
         
         # Non-blocking read on stdin
-        if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
-            try:
+        try:
+            if sys.stdin in select.select([sys.stdin], [], [], 0.01)[0]:
                 key = sys.stdin.read(1).lower()
                 
                 if key == 'q':
                     raise KeyboardInterrupt("User quit via keyboard")
-                elif key == '1':
-                    self.current_camera = 0
-                    self.signals.manual_camera = 0
-                    logger.info("Selected camera 1")
-                elif key == '2':
-                    self.current_camera = 1
-                    self.signals.manual_camera = 1
-                    logger.info("Selected camera 2")
-                elif key == '3':
-                    self.current_camera = 2
-                    self.signals.manual_camera = 2
-                    logger.info("Selected camera 3")
+                
+                # Camera selection (1-9)
+                elif key.isdigit():
+                    cam_num = int(key)
+                    if 1 <= cam_num <= self.num_cameras:
+                        self.current_camera = cam_num - 1
+                        self.signals.manual_camera = cam_num - 1
+                        self.left_indicator = False
+                        self.right_indicator = False
+                        self.reverse = False
+                        logger.info(f"Selected camera {cam_num}")
+                    else:
+                        logger.debug(f"Camera {cam_num} not available (have {self.num_cameras})")
+                
+                # Reverse mode
                 elif key == 'r':
                     self.reverse = not self.reverse
                     self.signals.reverse = self.reverse
+                    self.signals.manual_camera = None
+                    self.left_indicator = False
+                    self.right_indicator = False
                     logger.info(f"Reverse: {self.reverse}")
-            except (EOFError, KeyboardInterrupt):
-                raise
-            except Exception as e:
-                logger.debug(f"Keyboard read error: {e}")
+                
+                # Turn signals
+                elif key == 'l':
+                    self.left_indicator = not self.left_indicator
+                    self.right_indicator = False  # Can't turn both ways
+                    self.signals.left_indicator = self.left_indicator
+                    self.signals.right_indicator = False
+                    self.reverse = False
+                    self.signals.manual_camera = None
+                    logger.info(f"Left indicator: {self.left_indicator}")
+                
+                elif key == 'k':  # k for riGht
+                    self.right_indicator = not self.right_indicator
+                    self.left_indicator = False  # Can't turn both ways
+                    self.signals.left_indicator = False
+                    self.signals.right_indicator = self.right_indicator
+                    self.reverse = False
+                    self.signals.manual_camera = None
+                    logger.info(f"Right indicator: {self.right_indicator}")
+                
+                # Normal mode
+                elif key == 'n':
+                    self.reverse = False
+                    self.left_indicator = False
+                    self.right_indicator = False
+                    self.signals.manual_camera = None
+                    self.signals.reverse = False
+                    self.signals.left_indicator = False
+                    self.signals.right_indicator = False
+                    logger.info("Normal mode")
+        
+        except (EOFError, KeyboardInterrupt):
+            raise
+        except Exception as e:
+            logger.debug(f"Keyboard read error: {e}")
         
         self.signals.timestamp = time.time()
         return self.signals
@@ -144,7 +207,7 @@ class KeyboardInputReader(InputReader):
             self.original_settings = termios.tcgetattr(sys.stdin)
             tty.setraw(sys.stdin.fileno())
         except Exception as e:
-            logger.warning(f"Could not set terminal to raw mode: {e}")
+            logger.warning(f"Could not set terminal to raw mode: {e} (Windows?)")
         logger.info("Keyboard reader started")
     
     def stop(self):
@@ -152,8 +215,9 @@ class KeyboardInputReader(InputReader):
         self.is_running = False
         # Restore terminal settings
         try:
-            import termios
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.original_settings)
+            if self.original_settings:
+                import termios
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.original_settings)
         except:
             pass
         logger.info("Keyboard reader stopped")
