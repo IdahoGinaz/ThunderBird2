@@ -35,20 +35,27 @@ Raspberry Pi continuously captures from 3 USB cameras, switches views based on t
   - [x] Updated main.py to use ViewLogicEngine (was importing ViewLogic)
   - [x] Added callback support to ViewLogicEngine (register_on_view_change)
   - [x] Application now starts successfully and runs event loop
-- [ ] **Implement keyboard input reader (POC)**
-  - [ ] Non-blocking keyboard input using `select` module
-  - [ ] Keys: 1/2/3 for cameras, R for reverse, L/R for indicators, Q to quit
-  - [ ] Test view switching with real camera output
-- [ ] **Implement actual frame capture-to-output pipeline**
-  - [ ] Pull frames from camera_manager queue in main loop
-  - [ ] Route frames to selected output via output_manager
-  - [ ] Test video appears on RTSP stream and RCA output
+- [x] **Implement keyboard input reader (POC)**
+  - [x] Non-blocking keyboard input using `select` module
+  - [x] Keys: 1-9 for cameras, r for reverse, l/k for indicators, n for normal, q to quit
+  - [x] Dynamic camera count support (validates input, prevents selecting non-existent cameras)
+  - [x] Terminal raw mode handling with fallback for non-TTY environments
+  - [x] Help text display on startup and shutdown
+- [x] **Implement actual frame capture-to-output pipeline**
+  - [x] Pull frames from camera_manager queue in main loop
+  - [x] Drain queue to find frames from active camera
+  - [x] Route frames to output_manager.send_frame()
+  - [x] Track frame count and print stats every 300 frames
+  - [x] Application tested on Pi - starts successfully, all 3 cameras capturing
 - [ ] Implement GPIO input reader (RPi.GPIO or gpiozero)
 - [ ] Implement CAN input reader (python-can for Nissan Atlas)
 - [ ] Implement view switching logic (priority: manual > reverse > turn > normal)
 - [ ] Implement three-output encoding pipeline (RTSP + RCA + USB DVR)
 - [ ] Implement actual frame capture-to-output pipeline
 - [ ] Setup menu for camera configuration changes
+- [ ] **Test keyboard input live** (manual view switching with real camera output)
+- [ ] **Test output streams** (RTSP stream reachable, RCA/USB DVR receive frames)
+- [ ] Connect to Android head unit and test video output
 
 ## Phase 3: Polish
 - [ ] Systemd service template (auto-start, restart on failure)
