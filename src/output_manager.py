@@ -155,6 +155,7 @@ class RTSPOutput(OutputTarget):
         try:
             Gst = self.Gst
             GstRtspServer = self.GstRtspServer
+            GLib = __import__("gi.repository", fromlist=["GLib"]).GLib
             
             # Create RTSP server
             self.server = GstRtspServer.RTSPServer()
@@ -168,22 +169,32 @@ class RTSPOutput(OutputTarget):
             mount_points = self.server.get_mount_points()
             mount_points.add_factory(RTSP_PATH, media_factory)
             
-            # Start RTSP server
-            self.server.attach(None)
+            # Create and start GLib main loop in background thread
+            # This is REQUIRED for the RTSP server to process client requests
+            self.glib_loop = GLib.MainLoop()
+            self.glib_thread = threading.Thread(target=self._glib_main_loop, daemon=True)
+            self.glib_thread.start()
             
-            # Create a tee element to split frames to appsrc inputs
-            # This will be fed from the main loop and distribute to all client pipelines
-            self.appsrc = None  # Will be set when first pipeline is created
+            # Attach server to the main loop
+            self.server.attach(self.glib_loop.get_context())
             
             self.is_running = True
             self.stats.is_active = True
-            logger.info(f"RTSP output started on {RTSP_HOST}:{RTSP_PORT}{RTSP_PATH} (dynamic pipeline)")
+            logger.info(f"RTSP output started on {RTSP_HOST}:{RTSP_PORT}{RTSP_PATH} (with GLib main loop)")
         
         except Exception as e:
             self.is_running = False
             self.stats.errors += 1
             self.stats.last_error = str(e)
             logger.error(f"Failed to start RTSP server: {e}", exc_info=True)
+    
+    def _glib_main_loop(self):
+        """Run GLib main loop in background thread to process RTSP requests."""
+        try:
+            if self.glib_loop:
+                self.glib_loop.run()
+        except Exception as e:
+            logger.error(f"GLib main loop error: {e}")
     
     def _create_media_factory(self):
         """Create RTSP media factory with per-client pipelines."""
