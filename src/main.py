@@ -147,10 +147,21 @@ class ThunderBird2:
     def run(self):
         """Main event loop - capture, switch views, encode, output."""
         logger.info("Entering main event loop")
+        logger.info("Frame loop starting - will capture from camera queue...")
         
         try:
             frame_count = 0
+            loop_count = 0
+            last_stats_time = time.time()
+            last_log_time = time.time()
+            
             while self.is_running:
+                loop_count += 1
+                
+                # Log progress every 50 loops (~2.5 seconds at 20 loops/sec)
+                if loop_count % 50 == 0:
+                    logger.info(f"Loop count: {loop_count}, Frames sent: {frame_count}")
+                
                 # Step 1: Get the active camera based on input signals
                 active_camera = self.view_logic.get_active_camera()
                 
@@ -189,6 +200,13 @@ class ThunderBird2:
                 # Print stats every 300 frames (~10 seconds at 30fps)
                 if frame_count % 300 == 0:
                     self.output_manager.print_stats()
+                
+                # Also log stats periodically for debugging
+                if frame_count > 0 and frame_count % 50 == 0:
+                    elapsed = time.time() - last_stats_time
+                    fps = 50 / elapsed if elapsed > 0 else 0
+                    logger.info(f"Frame {frame_count} sent ({fps:.1f} fps) - active_camera={active_camera}")
+                    last_stats_time = time.time()
         
         except KeyboardInterrupt:
             logger.info("Received interrupt signal")
