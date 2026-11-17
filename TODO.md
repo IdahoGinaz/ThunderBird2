@@ -47,15 +47,24 @@ Raspberry Pi continuously captures from 3 USB cameras, switches views based on t
   - [x] Route frames to output_manager.send_frame()
   - [x] Track frame count and print stats every 300 frames
   - [x] Application tested on Pi - starts successfully, all 3 cameras capturing
+- [x] **Implement RTSP output with GStreamer**
+  - [x] Install GStreamer RTSP server packages on Pi
+  - [x] Set up passwordless sudo for thunderbird2 user
+  - [x] Create GStreamer pipeline: appsrc → jpegdec → scale → x264enc → rtph264pay
+  - [x] JPEG frame injection into GStreamer pipeline
+  - [x] RTSP server listening on port 8554
+  - [x] Tested with gst-launch and confirmed stream is accepting connections
+  - [x] H.264 video encoding working
 - [ ] Implement GPIO input reader (RPi.GPIO or gpiozero)
 - [ ] Implement CAN input reader (python-can for Nissan Atlas)
 - [ ] Implement view switching logic (priority: manual > reverse > turn > normal)
-- [ ] Implement three-output encoding pipeline (RTSP + RCA + USB DVR)
-- [ ] Implement actual frame capture-to-output pipeline
+- [ ] Implement RCA composite output (V4L2loopback)
+- [ ] Implement USB DVR output (UVC gadget mode)
 - [ ] Setup menu for camera configuration changes
-- [ ] **Test keyboard input live** (manual view switching with real camera output)
-- [ ] **Test output streams** (RTSP stream reachable, RCA/USB DVR receive frames)
-- [ ] Connect to Android head unit and test video output
+- [ ] **Test RTSP stream live** (from Windows/Mac with VLC or ffplay)
+- [ ] **Test keyboard input with live video** (switch cameras with 1/2/3)
+- [ ] **Test multiple RTSP clients** connecting simultaneously
+- [ ] Connect to Android head unit and test USB/RCA output
 
 ## Phase 3: Polish
 - [ ] Systemd service template (auto-start, restart on failure)

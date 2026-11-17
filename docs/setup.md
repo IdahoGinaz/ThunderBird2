@@ -13,15 +13,13 @@ pip install -e .
 
 ### SSH Access
 - **Username**: `thunderbird2`
-- **IP**: 192.168.178.103
-- **Hostname**: thunderbird2.local (use for `ssh thunderbird2.local`)
+- **Hostname**: thunderbird2.local (recommended over IP)
 - **Auth**: Public key (ED25519) — passwordless SSH configured ✓
 
 **Connect**:
-```
+```bash
 ssh thunderbird2@thunderbird2.local
 ```
-(No passphrase or password required)
 
 ### OS & Interfaces
 - **OS**: Raspberry Pi OS Bookworm
@@ -29,32 +27,49 @@ ssh thunderbird2@thunderbird2.local
 - **Enable I2C**: For future sensor integration
 - **Enable UART**: For debugging (optional)
 
-### Python Environment
+### Python Dependencies (System)
+
+First, enable passwordless sudo for the `thunderbird2` user. As `root` or via `sudo visudo`:
+
+```bash
+# Add to /etc/sudoers:
+thunderbird2 ALL=(ALL) NOPASSWD: ALL
+```
+
+Then install system packages:
+
 ```bash
 ssh thunderbird2@thunderbird2.local
 
 # On Pi:
-python3 -m venv ~/thunderbird2/.venv
-source ~/thunderbird2/.venv/bin/activate
-pip install -e ~/thunderbird2
-
-# Install system dependencies:
 sudo apt update
 sudo apt install -y \
     python3-dev \
     python3-opencv \
+    python3-gi \
     libopencv-dev \
     v4l-utils \
     gstreamer1.0 \
+    gstreamer1.0-tools \
     libgstreamer1.0-0 \
     gstreamer1.0-plugins-base \
     gstreamer1.0-plugins-good \
     gstreamer1.0-plugins-bad \
     gstreamer1.0-plugins-ugly \
-    gstreamer1.0-libav
+    gstreamer1.0-libav \
+    gir1.2-gstreamer-1.0 \
+    gir1.2-gst-rtsp-server-1.0
 
 # Optional (for CAN/OBDII):
 pip install python-can
+```
+
+### Python Environment
+```bash
+# On Pi:
+python3 -m venv ~/thunderbird2/.venv
+source ~/thunderbird2/.venv/bin/activate
+pip install -e ~/thunderbird2
 ```
 
 ### Systemd Service
@@ -104,13 +119,10 @@ sudo journalctl -fu thunderbird2-camera    # View logs
 python src/config.py                      # Print configuration summary
 python src/camera_detection.py --verbose  # Detect cameras & capabilities
 
-# Deploy to Pi:
-.\scripts\deploy.ps1 192.168.178.103      # (Once created)
-
-# On Pi:
-python src/camera_detection.py            # Verify cameras on Pi
-python src/camera_manager.py              # Test camera manager (stub)
-python src/view_logic.py                  # Test view logic (stub)
-python src/output_manager.py              # Test output manager (stub)
+# On Pi (after SSH):
+python3 src/camera_detection.py           # Verify cameras
+python3 src/main.py --config              # Print config
+python3 src/main.py --test                # Run self-tests
+python3 src/main.py                       # Run application
 ```
 
