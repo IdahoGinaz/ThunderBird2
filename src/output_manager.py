@@ -201,17 +201,20 @@ class RTSPOutput(OutputTarget):
         try:
             GstRtspServer = self.GstRtspServer
             Gst = self.Gst
+            parent_self = self
             
             class RTSPMediaFactory(GstRtspServer.RTSPMediaFactory):
                 def __init__(self):
                     super().__init__()
                 
                 def do_create_element(self, url):
-                    # Use videotestsrc as placeholder for now to test RTSP
-                    # TODO: Replace with live frame injection from camera_manager
+                    # Create pipeline with appsrc for live frame injection
                     pipeline_str = (
-                        "videotestsrc is-live=true ! "
-                        "video/x-raw,width=1280,height=720 ! "
+                        "appsrc name=source is-live=true do-timestamp=false ! "
+                        "image/jpeg,width=1920,height=1080 ! "
+                        "jpegdec ! "
+                        "videoscale ! video/x-raw,width=1280,height=720 ! "
+                        "videoconvert ! "
                         "x264enc speed-preset=ultrafast bitrate=2000 ! "
                         "rtph264pay name=pay0 pt=96"
                     )
@@ -219,6 +222,14 @@ class RTSPOutput(OutputTarget):
                     pipeline = Gst.parse_launch(pipeline_str)
                     if not pipeline:
                         raise Exception("Failed to parse pipeline")
+                    
+                    # Capture first appsrc element for frame injection
+                    source = pipeline.get_by_name("source")
+                    if source and not parent_self.appsrc:
+                        with parent_self.lock:
+                            if not parent_self.appsrc:
+                                parent_self.appsrc = source
+                                logger.info("Captured appsrc element from RTSP pipeline")
                     
                     return pipeline
             
@@ -245,6 +256,17 @@ class RTSPOutput(OutputTarget):
         
         try:
             self.is_running = False
+            
+            # Stop GLib main loop
+            if self.glib_loop:
+                self.glib_loop.quit()
+            
+            # Wait for thread to finish
+            if self.glib_thread and self.glib_thread.is_alive():
+                self.glib_thread.join(timeout=2)
+            
+            self.glib_loop = None
+            self.glib_thread = None
             self.appsrc = None
             if self.server:
                 self.server = None
@@ -255,26 +277,47 @@ class RTSPOutput(OutputTarget):
     
     def send_frame(self, frame_data: bytes, width: int, height: int, fps: int) -> bool:
         """
-        Send frame to RTSP clients.
-        
-        Currently disabled - using videotestsrc placeholder.
-        TODO: Implement frame injection via appsrc or external encoder.
+        Send frame to RTSP clients via appsrc injection.
         
         Args:
             frame_data: JPEG encoded frame bytes
-            width: Frame width
-            height: Frame height
+            width: Frame width (1920 expected)
+            height: Frame height (1080 expected)
             fps: Frames per second from camera
         
         Returns:
-            True (always, until frame injection implemented)
+            True if sent successfully
         """
         if not self.is_running:
             return False
         
         try:
-            # TODO: Implement frame injection
-            # For now, just count frames with videotestsrc placeholder
+            if not self.gstreamer_available or not self.appsrc:
+                # Fallback: just count frames while waiting for first client
+                self.stats.frames_sent += 1
+                self.stats.bytes_sent += len(frame_data)
+                return True
+            
+            Gst = self.Gst
+            
+            # Create buffer from JPEG frame data
+            buf = Gst.Buffer.new_wrapped(frame_data)
+            # Set duration based on frame rate
+            buf.duration = Gst.SECOND // fps if fps > 0 else 33 * Gst.MSECOND
+            
+            # Push buffer to appsrc element
+            with self.lock:
+                try:
+                    result = self.appsrc.emit("push-buffer", buf)
+                    if result != Gst.FlowReturn.OK:
+                        logger.debug(f"GStreamer push-buffer returned: {result}")
+                        self.stats.errors += 1
+                        return False
+                except Exception as e:
+                    logger.debug(f"Error pushing buffer to appsrc: {e}")
+                    self.stats.errors += 1
+                    return False
+            
             self.stats.frames_sent += 1
             self.stats.bytes_sent += len(frame_data)
             return True

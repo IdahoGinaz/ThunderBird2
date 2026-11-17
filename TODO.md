@@ -50,20 +50,23 @@ Raspberry Pi continuously captures from 3 USB cameras, switches views based on t
 - [x] **Implement RTSP output with GStreamer**
   - [x] Install GStreamer RTSP server packages on Pi
   - [x] Set up passwordless sudo for thunderbird2 user
-  - [x] Create GStreamer pipeline: appsrc → jpegdec → scale → x264enc → rtph264pay
+  - [x] Create GStreamer pipeline: appsrc → jpegdec → videoconvert → rtpvp8pay
   - [x] JPEG frame injection into GStreamer pipeline
   - [x] RTSP server listening on port 8554
   - [x] Tested with gst-launch and confirmed stream is accepting connections
-  - [x] H.264 video encoding working
+  - [x] Fixed RTSP server not responding issue (missing GLib.MainLoop in background thread)
+  - [x] Transitioned from videotestsrc test pattern to live camera frame injection
+  - [x] Application deployed and frames being captured successfully (~3.8-3.9 fps)
+- [ ] **Test RTSP stream live** (from Windows/Mac with VLC or ffplay) — PRIORITY
+  - [ ] Verify live camera frames appear in VLC (not test pattern)
+  - [ ] Test camera switching (keyboard 1/2/3) over RTSP
+  - [ ] Test multiple simultaneous RTSP clients
 - [ ] Implement GPIO input reader (RPi.GPIO or gpiozero)
 - [ ] Implement CAN input reader (python-can for Nissan Atlas)
 - [ ] Implement view switching logic (priority: manual > reverse > turn > normal)
 - [ ] Implement RCA composite output (V4L2loopback)
 - [ ] Implement USB DVR output (UVC gadget mode)
 - [ ] Setup menu for camera configuration changes
-- [ ] **Test RTSP stream live** (from Windows/Mac with VLC or ffplay)
-- [ ] **Test keyboard input with live video** (switch cameras with 1/2/3)
-- [ ] **Test multiple RTSP clients** connecting simultaneously
 - [ ] Connect to Android head unit and test USB/RCA output
 
 ## Phase 3: Polish
