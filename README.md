@@ -12,7 +12,12 @@ See [docs/hardware.md](docs/hardware.md) for parts list, pinout and wiring.
 2. Follow [docs/setup.md](docs/setup.md).
 
 ## Status
-See [TODO.md](TODO.md).
+✅ **Phase 2 - Core Implementation (RTSP Complete)**
+- Live camera to RTSP streaming working (rtsp://thunderbird2.local:8554/camera)
+- Keyboard input ready (manual testing on Pi)
+- Next: GPIO/CAN input readers, automatic view switching
+
+See [TODO.md](TODO.md) for detailed task list.
 
 ## Layout
 ```
