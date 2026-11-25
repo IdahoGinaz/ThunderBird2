@@ -55,12 +55,12 @@ Raspberry Pi continuously captures from 3 USB cameras, switches views based on t
   - [x] RTSP server listening on port 8554
   - [x] Tested with gst-launch and confirmed stream is accepting connections
   - [x] Fixed RTSP server not responding issue (missing GLib.MainLoop in background thread)
+  - [x] Fixed appsrc caps format (must be property, not separate element)
   - [x] Transitioned from videotestsrc test pattern to live camera frame injection
-  - [x] Application deployed and frames being captured successfully (~3.8-3.9 fps)
-- [ ] **Test RTSP stream live** (from Windows/Mac with VLC or ffplay) — PRIORITY
-  - [ ] Verify live camera frames appear in VLC (not test pattern)
-  - [ ] Test camera switching (keyboard 1/2/3) over RTSP
-  - [ ] Test multiple simultaneous RTSP clients
+  - [x] Application deployed and frames being captured successfully (~7 fps)
+  - [x] **✅ LIVE CAMERA VIDEO CONFIRMED WORKING IN VLC** (rtsp://thunderbird2.local:8554/camera)
+- [ ] Test camera switching with keyboard (1/2/3) over live RTSP stream
+- [ ] Test multiple simultaneous RTSP clients
 - [ ] Implement GPIO input reader (RPi.GPIO or gpiozero)
 - [ ] Implement CAN input reader (python-can for Nissan Atlas)
 - [ ] Implement view switching logic (priority: manual > reverse > turn > normal)
