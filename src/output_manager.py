@@ -210,8 +210,8 @@ class RTSPOutput(OutputTarget):
                 def do_create_element(self, url):
                     # Create pipeline with appsrc for live frame injection
                     pipeline_str = (
-                        "appsrc name=source is-live=true do-timestamp=false ! "
-                        "image/jpeg,width=1920,height=1080 ! "
+                        "appsrc name=source is-live=true do-timestamp=false "
+                        "caps=\"image/jpeg,width=1920,height=1080\" ! "
                         "jpegdec ! "
                         "videoscale ! video/x-raw,width=1280,height=720 ! "
                         "videoconvert ! "
