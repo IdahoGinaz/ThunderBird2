@@ -125,14 +125,22 @@ class KeyboardInputReader(InputReader):
         print("="*60 + "\n")
     
     def read_signals(self) -> InputSignals:
-        """Check for keyboard input (non-blocking)."""
+        """Check for keyboard input (truly non-blocking)."""
         if not self.is_running:
             return self.signals
         
-        # Non-blocking read on stdin
+        # Try to read single character without blocking
         try:
-            if sys.stdin in select.select([sys.stdin], [], [], 0.01)[0]:
-                key = sys.stdin.read(1).lower()
+            # Using non-blocking read with select as fallback for compatibility
+            if sys.stdin in select.select([sys.stdin], [], [], 0.001)[0]:
+                try:
+                    # Non-blocking read - will raise BlockingIOError if no data
+                    key = sys.stdin.read(1).lower()
+                    if not key:  # EOF
+                        return self.signals
+                except (BlockingIOError, IOError):
+                    # No data available yet
+                    return self.signals
                 
                 if key == 'q':
                     raise KeyboardInterrupt("User quit via keyboard")
@@ -200,15 +208,23 @@ class KeyboardInputReader(InputReader):
     def start(self):
         """Start reading keyboard input."""
         self.is_running = True
-        # Set stdin to non-blocking on Unix-like systems
+        # Set stdin to non-blocking, raw mode on Unix-like systems
         try:
             import tty
             import termios
+            import fcntl
+            
             self.original_settings = termios.tcgetattr(sys.stdin)
+            # Set raw mode (no line buffering, no echo)
             tty.setraw(sys.stdin.fileno())
+            
+            # Also set non-blocking at OS level
+            flags = fcntl.fcntl(sys.stdin, fcntl.F_GETFL)
+            fcntl.fcntl(sys.stdin, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+            
+            logger.info("Terminal set to raw, non-blocking mode for instant key detection")
         except Exception as e:
-            logger.warning(f"Could not set terminal to raw mode: {e} (Windows?)")
-        logger.info("Keyboard reader started")
+            logger.warning(f"Could not set terminal to raw mode: {e} (Windows or fallback mode)")
     
     def stop(self):
         """Stop reading keyboard input."""
