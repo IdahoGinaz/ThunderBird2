@@ -208,23 +208,27 @@ class KeyboardInputReader(InputReader):
     def start(self):
         """Start reading keyboard input."""
         self.is_running = True
-        # Set stdin to non-blocking, raw mode on Unix-like systems
+        # Set stdin to non-blocking, raw mode on Unix-like systems if it's a real TTY
         try:
             import tty
             import termios
             import fcntl
             
-            self.original_settings = termios.tcgetattr(sys.stdin)
-            # Set raw mode (no line buffering, no echo)
-            tty.setraw(sys.stdin.fileno())
-            
-            # Also set non-blocking at OS level
-            flags = fcntl.fcntl(sys.stdin, fcntl.F_GETFL)
-            fcntl.fcntl(sys.stdin, fcntl.F_SETFL, flags | os.O_NONBLOCK)
-            
-            logger.info("Terminal set to raw, non-blocking mode for instant key detection")
+            # Only apply raw mode if stdin is a TTY (real terminal, not piped/SSH)
+            if sys.stdin.isatty():
+                self.original_settings = termios.tcgetattr(sys.stdin)
+                # Set raw mode (no line buffering, no echo)
+                tty.setraw(sys.stdin.fileno())
+                
+                # Also set non-blocking at OS level
+                flags = fcntl.fcntl(sys.stdin, fcntl.F_GETFL)
+                fcntl.fcntl(sys.stdin, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+                
+                logger.info("Terminal set to raw, non-blocking mode for instant key detection")
+            else:
+                logger.info("stdin is not a TTY (SSH/piped input) - using select-based input")
         except Exception as e:
-            logger.warning(f"Could not set terminal to raw mode: {e} (Windows or fallback mode)")
+            logger.warning(f"Could not set terminal to raw mode: {e} (using fallback)")
     
     def stop(self):
         """Stop reading keyboard input."""
