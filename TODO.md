@@ -18,6 +18,9 @@ Raspberry Pi continuously captures from 3 USB cameras, switches views based on t
 - [x] Validation script with self-tests
 - [x] Development workflow guide (DEVELOPMENT.md)
 - [x] Linting tools installed (black, pylint, pytest)
+- [x] Git installed on Pi with repository tracking
+- [x] Deployment guide (DEPLOYMENT.md) with git-based workflow
+- [x] Automated deployment: `git pull` replaces manual SCP
 
 **Before each session:** Run `.\scripts\validate.ps1 -Test` to catch errors early
 
@@ -41,6 +44,10 @@ Raspberry Pi continuously captures from 3 USB cameras, switches views based on t
   - [x] Dynamic camera count support (validates input, prevents selecting non-existent cameras)
   - [x] Terminal raw mode handling with fallback for non-TTY environments
   - [x] Help text display on startup and shutdown
+  - [x] **✅ Fixed: Keyboard input now responds instantly without Enter key**
+    - Added `fcntl` O_NONBLOCK flag for true non-blocking I/O
+    - Added `isatty()` check to only apply raw mode on actual TTYs
+    - Reduced select timeout to 0.001s for faster response
 - [x] **Implement actual frame capture-to-output pipeline**
   - [x] Pull frames from camera_manager queue in main loop
   - [x] Drain queue to find frames from active camera
